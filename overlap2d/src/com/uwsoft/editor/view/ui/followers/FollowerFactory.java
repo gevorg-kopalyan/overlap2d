@@ -37,8 +37,6 @@ public class FollowerFactory {
                 return new LabelFollower(entity);
             case EntityFactory.PARTICLE_TYPE:
                 return new ParticleFollower(entity);
-            case EntityFactory.COMPOSITE_TYPE:
-                return new CompositeFollower(entity);
         }
 
         return new NormalSelectionFollower(entity);
