@@ -162,7 +162,7 @@ public class ImportDialogMediator extends SimpleMediator<ImportDialog> {
          Sandbox sandbox = Sandbox.getInstance();
         FileChooser fileChooser = new FileChooser(FileChooser.Mode.OPEN);
 
-        fileChooser.setMultiselectionEnabled(true);
+        fileChooser.setMultiSelectionEnabled(true);
         fileChooser.setListener(new FileChooserAdapter() {
             @Override
             public void selected(Array<FileHandle> files) {
@@ -261,7 +261,7 @@ public class ImportDialogMediator extends SimpleMediator<ImportDialog> {
             Gdx.app.postRunnable(() -> {
                 Sandbox sandbox = Sandbox.getInstance();
                 ProjectManager projectManager = facade.retrieveProxy(ProjectManager.NAME);
-                projectManager.openProjectAndLoadAllData(projectManager.getCurrentProjectVO().projectName);
+                projectManager.openProjectAndLoadAllData(projectManager.getCurrentProjectPath());
                 sandbox.loadCurrentProject();
                 ImportDialogMediator.this.viewComponent.setDroppingView();
                 facade.sendNotification(ProjectManager.PROJECT_DATA_UPDATED);

@@ -18,6 +18,36 @@
 
 package com.uwsoft.editor.proxy;
 
+import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.files.FileHandle;
+import com.badlogic.gdx.tools.texturepacker.TexturePacker;
+import com.badlogic.gdx.tools.texturepacker.TexturePacker.Settings;
+import com.badlogic.gdx.utils.Array;
+import com.badlogic.gdx.utils.Json;
+import com.kotcrab.vis.ui.util.dialog.DialogUtils;
+import com.puremvc.patterns.proxy.BaseProxy;
+import com.uwsoft.editor.Overlap2DFacade;
+import com.uwsoft.editor.data.manager.PreferencesManager;
+import com.uwsoft.editor.data.migrations.ProjectVersionMigrator;
+import com.uwsoft.editor.renderer.data.*;
+import com.uwsoft.editor.renderer.utils.MySkin;
+import com.uwsoft.editor.utils.AppConfig;
+import com.uwsoft.editor.utils.Overlap2DUtils;
+import com.uwsoft.editor.view.menu.Overlap2DMenuBar;
+import com.uwsoft.editor.view.stage.Sandbox;
+import com.uwsoft.editor.view.ui.widget.ProgressHandler;
+import com.vo.EditorConfigVO;
+import com.vo.ProjectVO;
+import com.vo.SceneConfigVO;
+import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.FilenameUtils;
+import org.w3c.dom.NodeList;
+import org.xml.sax.SAXException;
+
+import javax.imageio.ImageIO;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
 import java.awt.image.BufferedImage;
 import java.io.BufferedReader;
 import java.io.File;
@@ -27,43 +57,6 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-
-import javax.imageio.ImageIO;
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.parsers.ParserConfigurationException;
-
-import com.uwsoft.editor.data.manager.PreferencesManager;
-import com.uwsoft.editor.data.vo.SceneConfigVO;
-import com.uwsoft.editor.view.menu.Overlap2DMenuBar;
-
-import org.apache.commons.io.FileUtils;
-import org.apache.commons.io.FilenameUtils;
-import org.w3c.dom.NodeList;
-import org.xml.sax.SAXException;
-
-import com.badlogic.gdx.Gdx;
-import com.badlogic.gdx.files.FileHandle;
-import com.badlogic.gdx.tools.texturepacker.TexturePacker;
-import com.badlogic.gdx.tools.texturepacker.TexturePacker.Settings;
-import com.badlogic.gdx.utils.Array;
-import com.badlogic.gdx.utils.Json;
-import com.kotcrab.vis.ui.util.dialog.DialogUtils;
-import com.puremvc.patterns.proxy.BaseProxy;
-import com.uwsoft.editor.data.migrations.ProjectVersionMigrator;
-import com.uwsoft.editor.data.vo.EditorConfigVO;
-import com.uwsoft.editor.data.vo.ProjectVO;
-import com.uwsoft.editor.view.stage.Sandbox;
-import com.uwsoft.editor.view.ui.widget.ProgressHandler;
-import com.uwsoft.editor.Overlap2DFacade;
-import com.uwsoft.editor.renderer.data.CompositeItemVO;
-import com.uwsoft.editor.renderer.data.MainItemVO;
-import com.uwsoft.editor.renderer.data.ProjectInfoVO;
-import com.uwsoft.editor.renderer.data.ResolutionEntryVO;
-import com.uwsoft.editor.renderer.data.SceneVO;
-import com.uwsoft.editor.renderer.utils.MySkin;
-import com.uwsoft.editor.utils.AppConfig;
-import com.uwsoft.editor.utils.Overlap2DUtils;
 
 
 public class ProjectManager extends BaseProxy {
@@ -76,8 +69,10 @@ public class ProjectManager extends BaseProxy {
 
     public ProjectVO currentProjectVO;
     public ProjectInfoVO currentProjectInfoVO;
-    private String currentWorkingPath;
-    private String workspacePath;
+    private String currentProjectPath;
+
+    private String defaultWorkspacePath;
+
     private String DEFAULT_FOLDER = "Overlap2D";
     private float currentPercent = 0.0f;
     private ProgressHandler handler;
@@ -113,9 +108,8 @@ public class ProjectManager extends BaseProxy {
         try {
             editorConfigVO = getEditorConfig();
             String myDocPath = Overlap2DUtils.MY_DOCUMENTS_PATH;
-            workspacePath = myDocPath + "/" + DEFAULT_FOLDER;
-            FileUtils.forceMkdir(new File(workspacePath));
-            currentWorkingPath = workspacePath;
+            defaultWorkspacePath = myDocPath + File.separator + DEFAULT_FOLDER;
+            FileUtils.forceMkdir(new File(defaultWorkspacePath));
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -126,14 +120,17 @@ public class ProjectManager extends BaseProxy {
         handler.progressChanged(currentPercent);
     }
 
-    public void createEmptyProject(String projectName, int width, int height, int pixelPerWorldUnit) throws IOException {
+    public void createEmptyProject(String projectPath, int width, int height, int pixelPerWorldUnit) throws IOException {
 
+        /*
         if (workspacePath.endsWith(File.separator)) {
             workspacePath = workspacePath.substring(0, workspacePath.length() - 1);
         }
 
         String projPath = workspacePath + File.separator + projectName;
-        currentWorkingPath = workspacePath;
+        */
+        String projectName = new File(projectPath).getName();
+        String projPath = FilenameUtils.normalize(projectPath);
 
         FileUtils.forceMkdir(new File(projPath));
         FileUtils.forceMkdir(new File(projPath + File.separator + "export"));
@@ -161,6 +158,7 @@ public class ProjectManager extends BaseProxy {
         //TODO: add project orig resolution setting
         currentProjectVO = projVo;
         currentProjectInfoVO = projInfoVo;
+        currentProjectPath = projPath;
         SceneDataManager sceneDataManager = facade.retrieveProxy(SceneDataManager.NAME);
         sceneDataManager.createNewScene("MainScene");
         FileUtils.writeStringToFile(new File(projPath + "/project.pit"), projVo.constructJsonString(), "utf-8");
@@ -183,12 +181,11 @@ public class ProjectManager extends BaseProxy {
         }
     }
 
-    public void openProjectAndLoadAllData(String projectName) {
-        openProjectAndLoadAllData(projectName, null);
+    public void openProjectAndLoadAllData(String projectPath) {
+        openProjectAndLoadAllData(projectPath, null);
     }
 
-    public void openProjectAndLoadAllData(String projectName, String resolution) {
-        String projectPath = currentWorkingPath + "/" + projectName;
+    public void openProjectAndLoadAllData(String projectPath, String resolution) {
         String prjFilePath = projectPath + "/project.pit";
 
         PreferencesManager prefs = PreferencesManager.getInstance();
@@ -225,8 +222,9 @@ public class ProjectManager extends BaseProxy {
                 saveCurrentProject();
 
             }
-            checkForConsistancy();
-            loadProjectData(projectName);
+            currentProjectPath = projectPath;
+            checkForConsistency(projectPath);
+            loadProjectData(projectPath);
         }
     }
 
@@ -235,12 +233,10 @@ public class ProjectManager extends BaseProxy {
         pvm.start();
     }
 
-    private void checkForConsistancy() {
+    private void checkForConsistency(String projectPath) {
         // check if current project requires cleanup
-        // Cleanup unused meshes
-        // 1. open all scenes make list of mesh_id's and then remove all unused meshes
-        HashSet<String> uniqueMeshIds = new HashSet<String>();
-        FileHandle sourceDir = new FileHandle(currentWorkingPath + "/" + currentProjectVO.projectName + "/scenes/");
+
+        FileHandle sourceDir = new FileHandle(projectPath + "/scenes/");
         for (FileHandle entry : sourceDir.list(Overlap2DUtils.DT_FILTER)) {
             if (!entry.file().isDirectory()) {
                 Json json = new Json();
@@ -257,31 +253,23 @@ public class ProjectManager extends BaseProxy {
         }
     }
 
+    public void reLoadProjectAssets() {
+        ResolutionManager resolutionManager = facade.retrieveProxy(ResolutionManager.NAME);
+        ResourceManager resourceManager = facade.retrieveProxy(ResourceManager.NAME);
+        resourceManager.loadCurrentProjectAssets(currentProjectPath + "/assets/" + resolutionManager.currentResolutionName + "/pack/pack.atlas");
+    }
 
-    private void loadProjectData(String projectName) {
+    private void loadProjectData(String projectPath) {
         // All legit loading assets
         ResolutionManager resolutionManager = facade.retrieveProxy(ResolutionManager.NAME);
         ResourceManager resourceManager = facade.retrieveProxy(ResourceManager.NAME);
-        resourceManager.loadCurrentProjectData(currentWorkingPath, projectName, resolutionManager.currentResolutionName);
-    }
-
-
-    public String getCurrentWorkingPath() {
-        return currentWorkingPath;
-    }
-
-    public String getWorkspacePath() {
-        return editorConfigVO.lastOpenedSystemPath.isEmpty() ? workspacePath : editorConfigVO.lastOpenedSystemPath;
-    }
-
-    public void setWorkspacePath(String path) {
-        workspacePath = path;
+        resourceManager.loadCurrentProjectData(projectPath, resolutionManager.currentResolutionName);
     }
 
     public void saveCurrentProject() {
         try {
-            FileUtils.writeStringToFile(new File(currentWorkingPath + "/" + currentProjectVO.projectName + "/project.pit"), currentProjectVO.constructJsonString(), "utf-8");
-            FileUtils.writeStringToFile(new File(currentWorkingPath + "/" + currentProjectVO.projectName + "/project.dt"), currentProjectInfoVO.constructJsonString(), "utf-8");
+            FileUtils.writeStringToFile(new File(currentProjectPath + "/project.pit"), currentProjectVO.constructJsonString(), "utf-8");
+            FileUtils.writeStringToFile(new File(currentProjectPath + "/project.dt"), currentProjectInfoVO.constructJsonString(), "utf-8");
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -364,7 +352,7 @@ public class ProjectManager extends BaseProxy {
                 sourcePath = animationFileSource.path();
 
                 animationDataPath = FilenameUtils.getFullPathNoEndSeparator(sourcePath);
-                targetPath = currentWorkingPath + "/" + currentProjectVO.projectName + "/assets/orig/spine-animations" + File.separator + fileNameWithOutExt;
+                targetPath = currentProjectPath + "/assets/orig/spine-animations" + File.separator + fileNameWithOutExt;
                 FileHandle atlasFileSource = new FileHandle(animationDataPath + File.separator + fileNameWithOutExt + ".atlas");
                 if (!atlasFileSource.exists()) {
                     //showError("the atlas file needs to have same name and location as the json file");
@@ -388,7 +376,7 @@ public class ProjectManager extends BaseProxy {
 
 
             } else if (Overlap2DUtils.SCML_FILTER.accept(null, fileName)) {
-                targetPath = currentWorkingPath + "/" + currentProjectVO.projectName + "/assets/orig/spriter-animations" + File.separator + fileNameWithOutExt;
+                targetPath = currentProjectPath + "/assets/orig/spriter-animations" + File.separator + fileNameWithOutExt;
                 File scmlFileTarget = new File(targetPath + File.separator + fileNameWithOutExt + ".scml");
                 ArrayList<File> imageFiles = getScmlFileImagesList(animationFileSource);
 
@@ -434,7 +422,7 @@ public class ProjectManager extends BaseProxy {
                 }
                 String fileNameWithoutExt = FilenameUtils.removeExtension(rawFileName);
                 String fileNameWithoutFrame = fileNameWithoutExt.replaceAll("\\d*$", "");
-                String targetPath = currentWorkingPath + "/" + currentProjectVO.projectName + "/assets/orig/sprite-animations" + File.separator + fileNameWithoutFrame;
+                String targetPath = currentProjectPath + "/assets/orig/sprite-animations" + File.separator + fileNameWithoutFrame;
                 File targetDir = new File(targetPath);
                 if (targetDir.exists()) {
                     try {
@@ -450,7 +438,7 @@ public class ProjectManager extends BaseProxy {
                     try {
                         Array<File> imgs = getAtlasPages(fileHandle);
                         String fileNameWithoutExt = FilenameUtils.removeExtension(fileHandle.name());
-                        String targetPath = currentWorkingPath + "/" + currentProjectVO.projectName + "/assets/orig/sprite-animations" + File.separator + fileNameWithoutExt;
+                        String targetPath = currentProjectPath + "/assets/orig/sprite-animations" + File.separator + fileNameWithoutExt;
                         File targetDir = new File(targetPath);
                         if (targetDir.exists()) {
                             FileUtils.deleteDirectory(targetDir);
@@ -506,11 +494,11 @@ public class ProjectManager extends BaseProxy {
         Array<File> imgs = getAtlasPages(fileHandle);
 
         Array<FileHandle> imgHandles = new Array<>();
-        for(int i = 0; i < imgs.size; i++) {
+        for (int i = 0; i < imgs.size; i++) {
             imgHandles.add(new FileHandle(imgs.get(i)));
         }
 
-        return  imgHandles;
+        return imgHandles;
     }
 
     private boolean addParticleEffectImages(FileHandle fileHandle, Array<FileHandle> imgs) {
@@ -521,15 +509,15 @@ public class ProjectManager extends BaseProxy {
                 if (line == null) break;
                 if (line.trim().equals("- Image Path -")) {
                     line = reader.readLine();
-                    if(line.contains("\\") || line.contains("/")) {
+                    if (line.contains("\\") || line.contains("/")) {
                         // then it's a path let's see if exists.
                         File tmp = new File(line);
-                        if(tmp.exists()) {
+                        if (tmp.exists()) {
                             imgs.add(new FileHandle(tmp));
                         } else {
                             line = FilenameUtils.getBaseName(line) + ".png";
                             File file = new File(FilenameUtils.getFullPath(fileHandle.path()) + line);
-                            if(file.exists()) {
+                            if (file.exists()) {
                                 imgs.add(new FileHandle(file));
                             } else {
                                 return false;
@@ -537,7 +525,7 @@ public class ProjectManager extends BaseProxy {
                         }
                     } else {
                         File file = new File(FilenameUtils.getFullPath(fileHandle.path()) + line);
-                        if(file.exists()) {
+                        if (file.exists()) {
                             imgs.add(new FileHandle(file));
                         } else {
                             return false;
@@ -556,7 +544,7 @@ public class ProjectManager extends BaseProxy {
         if (fileHandles == null) {
             return;
         }
-        final String targetPath = currentWorkingPath + "/" + currentProjectVO.projectName + "/assets/orig/particles";
+        final String targetPath = currentProjectPath + "/assets/orig/particles";
         handler = progressHandler;
         currentPercent = 0;
         ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -567,7 +555,7 @@ public class ProjectManager extends BaseProxy {
                     try {
                         //copy images
                         boolean allImagesFound = addParticleEffectImages(fileHandle, imgs);
-                        if(allImagesFound) {
+                        if (allImagesFound) {
                             // copy the fileHandle
                             String newName = fileHandle.name();
                             File target = new File(targetPath + "/" + newName);
@@ -580,7 +568,7 @@ public class ProjectManager extends BaseProxy {
                     }
                 }
             }
-            if(imgs.size > 0) {
+            if (imgs.size > 0) {
                 copyImageFilesForAllResolutionsIntoProject(imgs, false);
             }
             ResolutionManager resolutionManager = facade.retrieveProxy(ResolutionManager.NAME);
@@ -619,7 +607,6 @@ public class ProjectManager extends BaseProxy {
         });
         executor.shutdown();
     }
-
 
 
     public void importImagesIntoProject(final Array<FileHandle> files, ProgressHandler progressHandler) {
@@ -666,7 +653,7 @@ public class ProjectManager extends BaseProxy {
      */
     private int copyImageFilesIntoProject(Array<FileHandle> files, ResolutionEntryVO resolution, Boolean performResize) {
         float ratio = ResolutionManager.getResolutionRatio(resolution, currentProjectInfoVO.originalResolution);
-        String targetPath = currentWorkingPath + "/" + currentProjectVO.projectName + "/assets/" + resolution.name + "/images";
+        String targetPath = currentProjectPath + "/assets/" + resolution.name + "/images";
         float perCopyPercent = 95.0f / files.size;
 
         int resizeWarningsCount = 0;
@@ -707,7 +694,7 @@ public class ProjectManager extends BaseProxy {
         if (fileHandles == null) {
             return;
         }
-        String targetPath = currentWorkingPath + "/" + currentProjectVO.projectName + "/assets/orig/freetypefonts";
+        String targetPath = currentProjectPath + "/assets/orig/freetypefonts";
         handler = progressHandler;
         float perCopyPercent = 95.0f / fileHandles.size;
         for (FileHandle fileHandle : fileHandles) {
@@ -745,7 +732,7 @@ public class ProjectManager extends BaseProxy {
         if (handle == null) {
             return;
         }
-        final String targetPath = currentWorkingPath + "/" + currentProjectVO.projectName + "/assets/orig/styles";
+        final String targetPath = currentProjectPath + "/assets/orig/styles";
         FileHandle fileHandle = Gdx.files.absolute(handle.path());
         final MySkin skin = new MySkin(fileHandle);
         handler = progressHandler;
@@ -818,12 +805,12 @@ public class ProjectManager extends BaseProxy {
     }
 
     public String getFreeTypeFontPath() {
-        return currentWorkingPath + "/" + currentProjectVO.projectName + "/assets/orig/freetypefonts";
+        return currentProjectPath + "/assets/orig/freetypefonts";
     }
 
     public void exportProject() {
 
-        String defaultBuildPath = currentWorkingPath + "/" + currentProjectVO.projectName + "/export";
+        String defaultBuildPath = currentProjectPath + "/export";
         exportPacks(defaultBuildPath);
         if (!currentProjectVO.projectMainExportPath.isEmpty()) {
             exportPacks(currentProjectVO.projectMainExportPath);
@@ -835,6 +822,10 @@ public class ProjectManager extends BaseProxy {
         exportParticles(defaultBuildPath);
         if (!currentProjectVO.projectMainExportPath.isEmpty()) {
             exportParticles(currentProjectVO.projectMainExportPath);
+        }
+        exportShaders(defaultBuildPath);
+        if (!currentProjectVO.projectMainExportPath.isEmpty()) {
+            exportShaders(currentProjectVO.projectMainExportPath);
         }
         exportFonts(defaultBuildPath);
         if (!currentProjectVO.projectMainExportPath.isEmpty()) {
@@ -850,7 +841,7 @@ public class ProjectManager extends BaseProxy {
 
 
     private void exportStyles(String targetPath) {
-        String srcPath = currentWorkingPath + "/" + currentProjectVO.projectName + "/assets/orig";
+        String srcPath = currentProjectPath + "/assets/orig";
         FileHandle origDirectoryHandle = Gdx.files.absolute(srcPath);
         FileHandle stylesDirectory = origDirectoryHandle.child("styles");
         File fileTarget = new File(targetPath + "/" + stylesDirectory.name());
@@ -861,8 +852,20 @@ public class ProjectManager extends BaseProxy {
         }
     }
 
+    private void exportShaders(String targetPath) {
+        String srcPath = currentProjectPath + "/assets";
+        FileHandle origDirectoryHandle = Gdx.files.absolute(srcPath);
+        FileHandle shadersDirectory = origDirectoryHandle.child("shaders");
+        File fileTarget = new File(targetPath + "/" + shadersDirectory.name());
+        try {
+            FileUtils.copyDirectory(shadersDirectory.file(), fileTarget);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
     private void exportParticles(String targetPath) {
-        String srcPath = currentWorkingPath + "/" + currentProjectVO.projectName + "/assets/orig";
+        String srcPath = currentProjectPath + "/assets/orig";
         FileHandle origDirectoryHandle = Gdx.files.absolute(srcPath);
         FileHandle particlesDirectory = origDirectoryHandle.child("particles");
         File fileTarget = new File(targetPath + "/" + particlesDirectory.name());
@@ -874,7 +877,7 @@ public class ProjectManager extends BaseProxy {
     }
 
     private void exportFonts(String targetPath) {
-        String srcPath = currentWorkingPath + "/" + currentProjectVO.projectName + "/assets/orig";
+        String srcPath = currentProjectPath + "/assets/orig";
         FileHandle origDirectoryHandle = Gdx.files.absolute(srcPath);
         FileHandle fontsDirectory = origDirectoryHandle.child("freetypefonts");
         File fileTarget = new File(targetPath + "/" + fontsDirectory.name());
@@ -898,7 +901,7 @@ public class ProjectManager extends BaseProxy {
     }
 
     private void exportSpineAnimationForResolution(String res, String targetPath) {
-        String spineSrcPath = currentWorkingPath + "/" + currentProjectVO.projectName + "/assets/" + res + File.separator + "spine-animations";
+        String spineSrcPath = currentProjectPath + "/assets/" + res + File.separator + "spine-animations";
         try {
             FileUtils.forceMkdir(new File(targetPath + File.separator + res + File.separator + "spine_animations"));
             File fileSrc = new File(spineSrcPath);
@@ -913,7 +916,7 @@ public class ProjectManager extends BaseProxy {
     }
 
     private void exportSpriteAnimationForResolution(String res, String targetPath) {
-        String spineSrcPath = currentWorkingPath + "/" + currentProjectVO.projectName + "/assets/" + res + File.separator + "sprite-animations";
+        String spineSrcPath = currentProjectPath + "/assets/" + res + File.separator + "sprite-animations";
         try {
             FileUtils.forceMkdir(new File(targetPath + File.separator + res + File.separator + "sprite_animations"));
             File fileSrc = new File(spineSrcPath);
@@ -928,7 +931,7 @@ public class ProjectManager extends BaseProxy {
     }
 
     private void exportSpriterAnimationForResolution(String res, String targetPath) {
-        String spineSrcPath = currentWorkingPath + "/" + currentProjectVO.projectName + "/assets/" + res + File.separator + "spriter-animations";
+        String spineSrcPath = currentProjectPath + "/assets/" + res + File.separator + "spriter-animations";
         try {
             FileUtils.forceMkdir(new File(targetPath + File.separator + res + File.separator + "spriter_animations"));
             File fileSrc = new File(spineSrcPath);
@@ -941,7 +944,7 @@ public class ProjectManager extends BaseProxy {
     }
 
     private void exportPacks(String targetPath) {
-        String srcPath = currentWorkingPath + "/" + currentProjectVO.projectName + "/assets";
+        String srcPath = currentProjectPath + "/assets";
         FileHandle assetDirectoryHandle = Gdx.files.absolute(srcPath);
         FileHandle[] assetDirectories = assetDirectoryHandle.list();
         for (FileHandle assetDirectory : assetDirectories) {
@@ -961,8 +964,8 @@ public class ProjectManager extends BaseProxy {
         }
     }
 
-    public void setExportPaths(File path) {
-        currentProjectVO.projectMainExportPath = path.getPath();
+    public void setExportPaths(String path) {
+        currentProjectVO.projectMainExportPath = path;
     }
 
     public void setTexturePackerSizes(int width, int height) {
@@ -1013,19 +1016,18 @@ public class ProjectManager extends BaseProxy {
         }
 
         try {
-            createEmptyProject(projectName, originWidth, originHeight, pixelPerWorldUnit);
-            openProjectAndLoadAllData(projectName);
+            createEmptyProject(projectPath, originWidth, originHeight, pixelPerWorldUnit);
+            openProjectAndLoadAllData(projectPath);
             String workSpacePath = projectPath.substring(0, projectPath.lastIndexOf(projectName));
             if (workSpacePath.length() > 0) {
                 setLastOpenedPath(workSpacePath);
-                setWorkspacePath(workSpacePath);
             }
             Sandbox.getInstance().loadCurrentProject();
             facade.sendNotification(PROJECT_OPENED);
-            
+
             //Set title with opened file path
             Gdx.graphics.setTitle(getFormatedTitle(projectPath));
-            
+
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -1035,14 +1037,13 @@ public class ProjectManager extends BaseProxy {
         File projectFile = new File(path);
         File projectFolder = projectFile.getParentFile();
         String projectName = projectFolder.getName();
-        currentWorkingPath = projectFolder.getParentFile().getPath();
-        editorConfigVO.lastOpenedSystemPath = currentWorkingPath;
+        editorConfigVO.lastOpenedSystemPath = projectFolder.getParentFile().getPath();
         saveEditorConfig();
 
         // here we load all data
-        openProjectAndLoadAllData(projectName);
+        openProjectAndLoadAllData(projectFolder.getPath());
         Sandbox.getInstance().loadCurrentProject();
-        
+
         facade.sendNotification(ProjectManager.PROJECT_OPENED);
 
         //Set title with opened file path
@@ -1050,14 +1051,14 @@ public class ProjectManager extends BaseProxy {
     }
 
 
-	private String getFormatedTitle(String path) {
-		//App Name + Version + path to opened file
-		return "Overlap2D - Public Aplha v" + AppConfig.getInstance().version + " - [ " + path + " ]";
-	}
+    private String getFormatedTitle(String path) {
+        //App Name + Version + path to opened file
+        return "Overlap2D - Public Aplha v" + AppConfig.getInstance().version + " - [ " + path + " ]";
+    }
 
     public SceneConfigVO getCurrentSceneConfigVO() {
-        for(int i = 0; i < currentProjectVO.sceneConfigs.size(); i++) {
-            if(currentProjectVO.sceneConfigs.get(i).sceneName.equals(Sandbox.getInstance().getSceneControl().getCurrentSceneVO().sceneName)) {
+        for (int i = 0; i < currentProjectVO.sceneConfigs.size(); i++) {
+            if (currentProjectVO.sceneConfigs.get(i).sceneName.equals(Sandbox.getInstance().getSceneControl().getCurrentSceneVO().sceneName)) {
                 return currentProjectVO.sceneConfigs.get(i);
             }
         }
@@ -1079,8 +1080,8 @@ public class ProjectManager extends BaseProxy {
         executor.execute(() -> {
             for (FileHandle handle : files) {
                 // check if shaders folder exists
-                String shadersPath = currentWorkingPath + "/" + currentProjectVO.projectName + "/assets/shaders";
-                File destination = new File(currentWorkingPath + "/" + currentProjectVO.projectName + "/assets/shaders/"+handle.name());
+                String shadersPath = currentProjectPath + "/assets/shaders";
+                File destination = new File(currentProjectPath + "/assets/shaders/" + handle.name());
                 try {
                     FileUtils.forceMkdir(new File(shadersPath));
                     FileUtils.copyFile(handle.file(), destination);
@@ -1100,5 +1101,24 @@ public class ProjectManager extends BaseProxy {
             handler.progressComplete();
         });
         executor.shutdown();
+    }
+
+    public String getCurrentProjectPath() {
+        return currentProjectPath;
+    }
+
+    public FileHandle getWorkspacePath() {
+        if (!editorConfigVO.lastOpenedSystemPath.isEmpty()) {
+            return new FileHandle(editorConfigVO.lastOpenedSystemPath);
+        }
+        return new FileHandle(defaultWorkspacePath);
+    }
+
+    public boolean deleteImage(String imageName) {
+        String imagesPath = currentProjectPath + "/assets/orig/images/";
+        String filePath = imagesPath+imageName+".png";
+
+        File file = new File(filePath);
+        return file.delete();
     }
 }

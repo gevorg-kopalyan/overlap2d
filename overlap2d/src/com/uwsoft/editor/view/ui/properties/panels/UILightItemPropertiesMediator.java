@@ -18,16 +18,14 @@
 
 package com.uwsoft.editor.view.ui.properties.panels;
 
-import com.uwsoft.editor.view.stage.Sandbox;
-import com.uwsoft.editor.controller.commands.component.UpdateLightDataCommand;
-
-import org.apache.commons.lang3.math.NumberUtils;
-
 import com.badlogic.ashley.core.Entity;
-import com.uwsoft.editor.view.ui.properties.UIItemPropertiesMediator;
+import com.commons.MsgAPI;
+import com.uwsoft.editor.controller.commands.component.UpdateLightDataCommand;
 import com.uwsoft.editor.renderer.components.light.LightObjectComponent;
 import com.uwsoft.editor.renderer.data.LightVO;
 import com.uwsoft.editor.renderer.utils.ComponentRetriever;
+import com.uwsoft.editor.view.ui.properties.UIItemPropertiesMediator;
+import org.apache.commons.lang3.math.NumberUtils;
 
 /**
  * Created by azakhary on 4/28/2015.
@@ -54,6 +52,7 @@ public class UILightItemPropertiesMediator extends UIItemPropertiesMediator<Enti
         viewComponent.setRadius(lightObjectComponent.distance + "");
         viewComponent.setAngle(lightObjectComponent.coneDegree + "");
         viewComponent.setDistance(lightObjectComponent.distance + "");
+        viewComponent.setDirection(lightObjectComponent.directionDegree + "");
         viewComponent.setSoftnessLength(lightObjectComponent.softnessLength + "");
     }
 
@@ -72,9 +71,10 @@ public class UILightItemPropertiesMediator extends UIItemPropertiesMediator<Enti
             payloadVo.distance = NumberUtils.toFloat(viewComponent.getRadius());
         } else {
             payloadVo.distance = NumberUtils.toFloat(viewComponent.getDistance());
+            payloadVo.directionDegree = NumberUtils.toFloat(viewComponent.getDirection());
         }
 
         Object payload = UpdateLightDataCommand.payload(observableReference, payloadVo);
-        facade.sendNotification(Sandbox.ACTION_UPDATE_LIGHT_DATA, payload);
+        facade.sendNotification(MsgAPI.ACTION_UPDATE_LIGHT_DATA, payload);
     }
 }
